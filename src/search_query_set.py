@@ -1,0 +1,71 @@
+import os
+import asyncio
+from typing import Dict, List
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+from src.config import CONCURRENCY
+from loguru import logger
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+PROMPT_TEMPLATE = """You are given a business name. There is a business registry with a search interface which allows us to search for business names. Other than the provided name, come up with EXACTLY ONE alternative string to query that will be likely to reveal the correct business in the interface's search response. The original should not contain the suggested alternative as a contiguous substring. The suggested alternative should ideally be minimal but not so minimal as to be generic.
+
+Return JUST the text of the suggested alternative
+
+Business name: {name}
+"""
+
+async def expand_one(name: str, sem: asyncio.Semaphore) -> tuple[int, List[str]]:
+    """
+    Generate one alternative query string for a given business name using the LLM.
+
+    Args:
+        name (str): Original business name.
+        sem (asyncio.Semaphore): Semaphore controlling concurrency of LLM requests.
+
+    Returns:
+        List[str]: A two-element list: [original_name, expanded_query]
+    """
+    async with sem:
+        try:
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You generate short, realistic business name alternatives."},
+                    {"role": "user", "content": PROMPT_TEMPLATE.format(name=name)},
+                ],
+                temperature=0.2,
+            )
+            suggestion = resp.choices[0].message.content.strip()
+            if not suggestion:
+                suggestion = name
+            return [name, suggestion]
+        except Exception as e:
+            logger.debug(f"LLM expansion failed for {name}: {e}")
+            return [name, name]
+
+async def expand_queries_for_batch(batch_df) -> Dict[int, List[str]]:
+    """
+    Expand search queries for a batch of businesses using the LLM.
+
+    Each business name receives one generated variant string, which can then be
+    used alongside the original in the registry search step to improve recall.
+
+    Args:
+        batch_df (pd.DataFrame): Batch of input rows, each containing a 'Name' column.
+
+    Returns:
+        Dict[int, List[str]]: A mapping from batch index to a [original, alternative] list.
+                              Example: {0: ["PETCO", "PET CO"], 1: ["LOTE 23", "LOT 23"]}
+    """
+    sem = asyncio.Semaphore(CONCURRENCY)
+    tasks = [
+        expand_one(row["Name"], sem)
+        for _, row in enumerate(batch_df.to_dict(orient="records"))
+    ]
+    results = await asyncio.gather(*tasks)
+    logger.debug("Expanded search set")
+    logger.debug(results)
+    return results

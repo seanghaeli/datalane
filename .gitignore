@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+.env/
+.venv/
+venv/
+env/
+*.log
+
+# IDEs and editors
+.vscode/
+.idea/
+
+# Mac and OS files
+.DS_Store
+
+# Jupyter and temp
+.ipynb_checkpoints/
+
+# Environment and secrets
+.env
+*.key
+*.pem
+logs/
+
+# CSV
+businesses.csv
+businesses_to_keep.csv

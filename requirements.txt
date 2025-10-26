@@ -1,0 +1,6 @@
+python-dotenv
+pandas
+aiohttp
+rapidfuzz
+openai>=1.0.0
+loguru
