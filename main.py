@@ -20,7 +20,7 @@ def batch_iter(df: pd.DataFrame, batch_size: int):
     for i in range(0, n, batch_size):
         yield i, df.iloc[i:i+batch_size].copy()
 
-async def process_batch(batch_df: pd.DataFrame) -> List[bool]:
+async def process_batch(batch_df: pd.DataFrame) -> pd.DataFrame:
     """
     Process a single batch of business records through the full matching pipeline.
 
@@ -29,7 +29,7 @@ async def process_batch(batch_df: pd.DataFrame) -> List[bool]:
                                  addresses, and other metadata.
 
     Returns:
-        List[bool]: One boolean per row indicating whether the business should be kept.
+        pd.DataFrame: Columns ["Name", "results", "resultsLLM", "overallResults"].
     """
     start = time.perf_counter()
 
@@ -40,11 +40,11 @@ async def process_batch(batch_df: pd.DataFrame) -> List[bool]:
     candidates = await fetch_registry_for_batch(batch_df, search_queries)
 
     # # 3) Determine whether government registry + Google Maps data support business existence
-    overallResults = await matching_orchestrator(batch_df, candidates)
+    results_df = await matching_orchestrator(batch_df, candidates)
 
     elapsed = time.perf_counter() - start
     logger.debug(f"Batch of {len(batch_df)} rows processed in {elapsed:.2f} seconds")
-    return overallResults
+    return results_df
 
 async def main():
     """
@@ -54,8 +54,8 @@ async def main():
     - Processes each batch asynchronously to determine if businesses should be kept.
     - Writes results incrementally to an output CSV.
     """
-    df = pd.read_csv(INPUT_CSV, nrows=400)
-    
+    # df = pd.read_csv(INPUT_CSV, skiprows=range(1, 160), nrows=40)
+    df = pd.read_csv(INPUT_CSV, nrows=160)
     # Initialize logs
     logger.remove()  # Remove default handler
     logger.add(sys.stderr, level=LOG_LEVEL, format="<green>{time:HH:mm:ss}</green> | <level>{message}</level>")
@@ -66,7 +66,7 @@ async def main():
         os.remove(output_path)
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Keep row"])
+        writer.writerow(["Name", "results", "resultsLLM", "resultsGoogleCheck", "overallResults"])
 
     # Process each batch sequentially
     for start_idx, batch_df in batch_iter(df, BATCH_SIZE):
@@ -76,8 +76,14 @@ async def main():
 
         with open(output_path, "a", newline="") as f:
             writer = csv.writer(f)
-            for flag in results:
-                writer.writerow([flag])
+            for _, row in results.iterrows():
+                writer.writerow([
+                    row.get("Name"),
+                    bool(row.get("results", False)),
+                    bool(row.get("resultsLLM", False)),
+                    int(row.get("resultsGoogleCheck", 0)),
+                    bool(row.get("overallResults", False)),
+                ])
 
 if __name__ == "__main__":
     asyncio.run(main())

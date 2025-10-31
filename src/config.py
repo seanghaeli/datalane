@@ -11,9 +11,9 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Runtime parameters
 BATCH_SIZE = 15
-FUZZY_THRESHOLD = 0.85
+FUZZY_THRESHOLD = 50
 CONCURRENCY = 1000
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "DEBUG"
 
 # URLs
 GOV_URL = "https://rceapi.estado.pr.gov/api/corporation/search"

@@ -1,5 +1,6 @@
 # src/matching_orchestrator.py
 
+import pandas as pd
 from src.matchers.classical_matcher import has_high_confidence_match
 from src.matchers.llm_matcher import llm_check_batch
 from src.matchers.google_matcher import activity_confidence_check
@@ -39,16 +40,29 @@ async def matching_orchestrator(batch_df, candidates):
         i: results.get(i, False) or resultsLLM.get(i, False)
         for i in set(results.keys()) | set(resultsLLM.keys())
     }
-
     """
-    Google activity heuristic (Not tested)
+    Google activity heuristic
     """
-    # resultsGoogleCheck = await activity_confidence_check(batch_df)
-    # for i, g_val in enumerate(resultsGoogleCheck):
-    #     if g_val == 1:
-    #         overallResults[i] = True   # Force keep
-    #     elif g_val == -1:
-    #         overallResults[i] = False  # Force drop
+    resultsGoogleCheck = await activity_confidence_check(batch_df)
 
-    # Return as flat list in batch order
-    return [overallResults.get(i, False) for i in range(len(batch_df))]
+    # Merge Google signal with force rules: +1 => force True, -1 => force False
+    for i, g_val in enumerate(resultsGoogleCheck):
+        if g_val == 1:
+            overallResults[i] = True
+        elif g_val == -1:
+            overallResults[i] = False
+
+    # Return DataFrame with Name and decision columns
+    n = len(batch_df)
+    out_df = pd.DataFrame({
+        "Name": batch_df["Name"].tolist(),
+        "results": [bool(results.get(i, False)) for i in range(n)],
+        "resultsLLM": [bool(resultsLLM.get(i, False)) for i in range(n)],
+        "resultsGoogleCheck": [
+            int(resultsGoogleCheck[i]) if isinstance(resultsGoogleCheck, list) and i < len(resultsGoogleCheck) else 0
+            for i in range(n)
+        ],
+        "overallResults": [bool(overallResults.get(i, False)) for i in range(n)],
+    })
+
+    return out_df

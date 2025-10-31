@@ -57,7 +57,7 @@ async def _post_one(session: ClientSession, search_str: str, sem: asyncio.Semaph
                 ZYTE_URL,
                 auth=BasicAuth(ZYTE_API_KEY, ""),
                 json=zyte_payload,
-                timeout=ClientTimeout(total=15)
+                timeout=ClientTimeout(total=60)
             ) as resp:
                 logger.debug(f"⏳ [{datetime.now().strftime('%H:%M:%S')}] Awaiting Zyte JSON for '{search_str}'")
 
@@ -124,7 +124,7 @@ async def _fetch_info_one(session: ClientSession, reg_index: str, sem: asyncio.S
                 ZYTE_URL,
                 auth=BasicAuth(ZYTE_API_KEY, ""),
                 json=zyte_payload,
-                timeout=ClientTimeout(total=30)
+                timeout=ClientTimeout(total=60)
             ) as resp:
                 data = await resp.json()
                 raw = b64decode(data["httpResponseBody"])
@@ -206,5 +206,6 @@ async def fetch_registry_for_batch(batch_df, expansions) -> Dict[int, List[dict]
         final_results = {i: [] for i in range(len(batch_df))}
         for idx, name, addr in addr_results:
             final_results[idx].append({"name": name, "address": addr})
-
+        logger.debug("final address results")
+        logger.debug(final_results)
     return final_results

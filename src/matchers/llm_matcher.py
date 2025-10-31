@@ -23,24 +23,25 @@ async def llm_check_one(name: str, address: str, candidates: List[Dict[str, Any]
     if not candidates:
         return False
 
+    # Build a simple list of candidate addresses only
     cand_text = "\n".join(
-        [f"- {c.get('name', '')}, {c.get('address', '')}" for c in candidates]
+        [f"- {c.get('address', '')}" for c in candidates]
     )
 
     prompt = f"""
-You are verifying whether the target business is the same as any of the candidate businesses.
+You are given a target address and a list of candidate addresses.
 
-Target business:
-Name: {name}
-Address: {address}
+Goal: Determine if any candidate address likely corresponds to the SAME real-world location as the target address. An exact string match is NOT required. Consider common variations, abbreviations, suite/unit numbers, formatting differences, or nearby equivalences that strongly indicate the same place.
 
-Candidate businesses:
+Target address:
+{address}
+
+Candidate addresses:
 {cand_text}
 
-If at least one candidate represents the same business (even if the names are written differently),
-respond with ONLY "YES". Otherwise respond with ONLY "NO".
+If there is enough evidence that at least one candidate is likely referring to the target location, respond with ONLY "YES". Otherwise, respond with ONLY "NO".
     """
-
+    print(prompt)
     try:
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",

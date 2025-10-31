@@ -10,7 +10,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-PROMPT_TEMPLATE = """You are given a business name. There is a business registry with a search interface which allows us to search for business names. Other than the provided name, come up with EXACTLY ONE alternative string to query that will be likely to reveal the correct business in the interface's search response. The original should not contain the suggested alternative as a contiguous substring. The suggested alternative should ideally be minimal but not so minimal as to be generic.
+PROMPT_TEMPLATE = """You are given a business name. There is a business registry with a search interface which allows us to search for business names. Other than the provided name, come up with EXACTLY ONE alternative string to query that will be likely to reveal the correct business in the interface's search response. You should try to identify the root substring of the original name that is most likely to reveal the correct business in the interface's search response. For example, if the original name is "Condal Tapas Restaurant & Rooftop Lounge", then the suggested alternative should be "Condal".
 
 Return JUST the text of the suggested alternative
 
