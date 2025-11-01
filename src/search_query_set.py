@@ -21,6 +21,8 @@ async def expand_one(name: str) -> List[str]:
     Returns:
         List[str]: A two-element list: [original_name, expanded_query]
     """
+    # Cache here - Cache LLM-generated alternative queries by business name
+    # Same business name should produce same alternative query (deterministic with low temperature)
     try:
         openai_client = OpenAIClient()
         resp = await openai_client.chat_completions_create(

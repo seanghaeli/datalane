@@ -39,6 +39,9 @@ Candidate addresses:
 If there is enough evidence that at least one candidate is likely referring to the target location, respond with ONLY "YES". Otherwise, respond with ONLY "NO".
     """
     print(prompt)
+    # Cache here - Cache LLM match results by (address, sorted_candidate_addresses) tuple
+    # Same target address + same candidate addresses should produce same result (temperature=0)
+    # Note: Sort candidate addresses for consistent cache key
     try:
         openai_client = OpenAIClient()
         resp = await openai_client.chat_completions_create(

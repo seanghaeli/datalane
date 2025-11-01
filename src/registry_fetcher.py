@@ -36,6 +36,8 @@ async def _post_one(zyte_client: ZyteClient, search_str: str) -> List[dict]:
 
     start = time.perf_counter()
     logger.debug(f"▶️ [{datetime.now().strftime('%H:%M:%S')}] START Zyte request for '{search_str}'")
+    # Cache here - Cache search results by search_str (business name query)
+    # Registry search results are relatively stable
     try:
         body = dict(BASE_PAYLOAD)
         body["corpName"] = search_str
@@ -97,6 +99,8 @@ async def _fetch_info_one(zyte_client: ZyteClient, reg_index: str, corp_name: st
     """
     start = time.perf_counter()
     logger.debug(f"📥 [{datetime.now().strftime('%H:%M:%S')}] Fetching info for registrationIndex={reg_index}")
+    # Cache here - Cache corporation info by reg_index (registrationIndex)
+    # Corporation addresses don't change frequently
     info_url = f"https://rceapi.estado.pr.gov/api/corporation/info/{reg_index}"
     
     headers = {"User-Agent": "Mozilla/5.0"}

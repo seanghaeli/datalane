@@ -29,6 +29,8 @@ async def activity_confidence_check(batch_records: List[BusinessRecord]) -> List
         )
 
         async def one(desc):
+            # Cache here - Cache expected visibility weights by description string
+            # Same business description should produce same expected visibility weight (low temperature)
             try:
                 openai_client = OpenAIClient()
                 r = await openai_client.chat_completions_create(
