@@ -1,13 +1,14 @@
 import os
 import asyncio
-from typing import Dict, List, Any
+from typing import Dict, List
 from openai import AsyncOpenAI
 from src.config import CONCURRENCY
+from src.models import CandidateRecord
 from loguru import logger
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-async def llm_check_one(name: str, address: str, candidates: List[Dict[str, Any]]) -> bool:
+async def llm_check_one(name: str, address: str, candidates: List[CandidateRecord]) -> bool:
     """
     LLM checking to determine if any of the given candidates correspond to the same business.
     Returns True if the model thinks at least one is a match.
@@ -15,7 +16,7 @@ async def llm_check_one(name: str, address: str, candidates: List[Dict[str, Any]
     Args:
         name (str): The target business name.
         address (str): The target business address.
-        candidates (List[Dict[str, Any]]): Candidate records, each with 'name' and 'address'.
+        candidates (List[CandidateRecord]): Candidate records.
 
     Returns:
         bool: True if the LLM deems at least one candidate to be the same business.
@@ -25,7 +26,7 @@ async def llm_check_one(name: str, address: str, candidates: List[Dict[str, Any]
 
     # Build a simple list of candidate addresses only
     cand_text = "\n".join(
-        [f"- {c.get('address', '')}" for c in candidates]
+        [f"- {c.address or ''}" for c in candidates]
     )
 
     prompt = f"""
@@ -59,7 +60,7 @@ If there is enough evidence that at least one candidate is likely referring to t
 async def llm_check_batch(
     names: List[str],
     addresses: List[str],
-    candidates: Dict[int, List[Dict[str, Any]]],
+    candidates: Dict[int, List[CandidateRecord]],
 ) -> Dict[int, bool]:
     """
     Perform parallel LLM checks across a batch of businesses.
@@ -67,7 +68,7 @@ async def llm_check_batch(
     Args:
         names (List[str]): Target business names.
         addresses (List[str]): Corresponding business addresses.
-        candidates (Dict[int, List[Dict[str, Any]]]): Mapping of row index → list of candidate dicts.
+        candidates (Dict[int, List[CandidateRecord]]): Mapping of row index → list of candidate records.
 
     Returns:
         Dict[int, bool]: Mapping of row index → boolean indicating if a match was found.
@@ -75,7 +76,7 @@ async def llm_check_batch(
     sem = asyncio.Semaphore(CONCURRENCY)
     results: Dict[int, bool] = {}
 
-    async def one_task(idx: int, name: str, addr: str, cands: List[Dict[str, Any]]):
+    async def one_task(idx: int, name: str, addr: str, cands: List[CandidateRecord]):
         async with sem:
             results[idx] = await llm_check_one(name, addr, cands)
 

@@ -1,14 +1,21 @@
 import numpy as np
 import asyncio
 import openai
+from typing import List
 from src.config import CONCURRENCY
+from src.models import BusinessRecord
 from loguru import logger
 
-async def activity_confidence_check(batch_df):
+async def activity_confidence_check(batch_records: List[BusinessRecord]) -> List[int]:
     """
     Compute dynamic, description-aware Google activity filtering.
-    Returns a list of ints where -1 indicates a pronounced lack of activity
-    relative to expected category importance; otherwise 0.
+    
+    Args:
+        batch_records (List[BusinessRecord]): Batch of business records with Google activity data.
+    
+    Returns:
+        List[int]: A list where -1 indicates a pronounced lack of activity
+        relative to expected category importance; otherwise 0.
     """
 
     # Helper 1: LLM weighting
@@ -58,10 +65,10 @@ async def activity_confidence_check(batch_df):
             return int(s) if s.isdigit() else 0
         return 0
 
-    def google_activity_score(row, weight=1.0):
-        reviews = row.get("Reviews count", 0) or 0
-        rating = row.get("Reviews rating", 0) or 0
-        photos = _parse_photos_count(row.get("Photos count", 0))
+    def google_activity_score(record: BusinessRecord, weight=1.0):
+        reviews = record.reviews_count or 0
+        rating = record.reviews_rating or 0
+        photos = _parse_photos_count(record.photos_count or 0)
         # Normalize features into [0,1] using conservative caps
         norm_reviews = min(max(reviews, 0), 300) / 300.0
         norm_photos = min(max(photos, 0), 100) / 100.0
@@ -77,17 +84,13 @@ async def activity_confidence_check(batch_df):
         return float(max(0.0, min(adjusted, 1.0)))
 
     # Run LLM weighting phase
-    descriptions = batch_df.get("Description 1", [""] * len(batch_df)).tolist()
-    main_types = batch_df.get("Main type", [""] * len(batch_df)).tolist()
-    weights = [1.0] * len(batch_df)  # Default neutral weights
+    descriptions = [r.description_1 or "" for r in batch_records]
+    main_types = [r.main_type or "" for r in batch_records]
+    weights = [1.0] * len(batch_records)  # Default neutral weights
 
     # Build simple "category + description" strings; either part may be empty
     llm_inputs = []
     for desc, mt in zip(descriptions, main_types):
-        if isinstance(desc, (float, np.floating)) and np.isnan(desc):
-            desc = ""
-        if isinstance(mt, (float, np.floating)) and np.isnan(mt):
-            mt = ""
         desc = (desc or "").strip()
         mt = (mt or "").strip()
         combo = f"{mt} {desc}".strip() if (mt or desc) else "Unknown"
@@ -103,8 +106,8 @@ async def activity_confidence_check(batch_df):
 
     # Compute normalized activity scores
     scores = []
-    for i, (_, row) in enumerate(batch_df.iterrows()):
-        score = google_activity_score(row, weight=weights[i])
+    for i, record in enumerate(batch_records):
+        score = google_activity_score(record, weight=weights[i])
         scores.append(score)
 
     # Threshold: <= 0.2 => -1 (pronounced lack of activity), else 0

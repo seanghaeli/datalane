@@ -1,9 +1,10 @@
 import os
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from src.config import CONCURRENCY
+from src.models import BusinessRecord
 from loguru import logger
 
 load_dotenv()
@@ -17,7 +18,7 @@ Return JUST the text of the suggested alternative
 Business name: {name}
 """
 
-async def expand_one(name: str, sem: asyncio.Semaphore) -> tuple[int, List[str]]:
+async def expand_one(name: str, sem: asyncio.Semaphore) -> List[str]:
     """
     Generate one alternative query string for a given business name using the LLM.
 
@@ -46,7 +47,7 @@ async def expand_one(name: str, sem: asyncio.Semaphore) -> tuple[int, List[str]]
             logger.debug(f"LLM expansion failed for {name}: {e}")
             return [name, name]
 
-async def expand_queries_for_batch(batch_df) -> Dict[int, List[str]]:
+async def expand_queries_for_batch(batch_records: List[BusinessRecord]) -> List[Tuple[str, str]]:
     """
     Expand search queries for a batch of businesses using the LLM.
 
@@ -54,18 +55,19 @@ async def expand_queries_for_batch(batch_df) -> Dict[int, List[str]]:
     used alongside the original in the registry search step to improve recall.
 
     Args:
-        batch_df (pd.DataFrame): Batch of input rows, each containing a 'Name' column.
+        batch_records (List[BusinessRecord]): Batch of input business records.
 
     Returns:
-        Dict[int, List[str]]: A mapping from batch index to a [original, alternative] list.
-                              Example: {0: ["PETCO", "PET CO"], 1: ["LOTE 23", "LOT 23"]}
+        List[Tuple[str, str]]: A list of (original, alternative) query pairs.
+                              Example: [("PETCO", "PET CO"), ("LOTE 23", "LOT 23")]
     """
     sem = asyncio.Semaphore(CONCURRENCY)
     tasks = [
-        expand_one(row["Name"], sem)
-        for _, row in enumerate(batch_df.to_dict(orient="records"))
+        expand_one(record.name, sem)
+        for record in batch_records
     ]
     results = await asyncio.gather(*tasks)
     logger.debug("Expanded search set")
     logger.debug(results)
-    return results
+    # Convert List[str] results to List[Tuple[str, str]]
+    return [(r[0], r[1]) for r in results]

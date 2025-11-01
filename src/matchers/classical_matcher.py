@@ -1,11 +1,12 @@
 from rapidfuzz import fuzz
-from typing import List, Dict, Any
+from typing import List, Dict
 from src.config import FUZZY_THRESHOLD
+from src.models import CandidateRecord
 
 def has_high_confidence_match(
     names: List[str],
     addresses: List[str],
-    candidates: Dict[int, List[Dict[str, Any]]],
+    candidates: Dict[int, List[CandidateRecord]],
     name_weight: float = 0.25,
     addr_weight: float = 0.75,
     threshold: float = FUZZY_THRESHOLD,
@@ -17,9 +18,9 @@ def has_high_confidence_match(
     Args:
         names (List[str]): List of business names for the batch.
         addresses (List[str]): Corresponding business addresses.
-        candidates (Dict[int, List[Dict[str, Any]]]): Mapping of row index → list of candidate dicts.
-        name_weight (float): Weight for the name similarity score (default=0.4).
-        addr_weight (float): Weight for the address similarity score (default=0.6).
+        candidates (Dict[int, List[CandidateRecord]]): Mapping of row index → list of candidate records.
+        name_weight (float): Weight for the name similarity score (default=0.25).
+        addr_weight (float): Weight for the address similarity score (default=0.75).
         threshold (float): Minimum weighted score required to consider a match.
 
     Returns:
@@ -31,8 +32,8 @@ def has_high_confidence_match(
         row_candidates = candidates.get(i, [])
         found = False
         for cand in row_candidates:
-            cand_name = cand.get("name", "")
-            cand_addr = cand.get("address", "")
+            cand_name = cand.name or ""
+            cand_addr = cand.address or ""
 
             # Compute similarity scores
             name_score = fuzz.ratio(str(name).lower(), str(cand_name).lower()) if name else 0

@@ -4,9 +4,10 @@ import time
 from base64 import b64decode
 from datetime import datetime
 from aiohttp import ClientSession, ClientTimeout, BasicAuth
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from loguru import logger
 from src.config import ZYTE_API_KEY, ZYTE_URL, GOV_URL, CONCURRENCY
+from src.models import BusinessRecord, CandidateRecord
 
 BASE_PAYLOAD = {
     "cancellationMode": False,
@@ -144,26 +145,28 @@ async def _fetch_info_one(session: ClientSession, reg_index: str, sem: asyncio.S
             logger.debug(f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] ERROR fetching info {reg_index}: {e}")
             return {"address": None}
 
-async def fetch_registry_for_batch(batch_df, expansions) -> Dict[int, List[dict]]:
+async def fetch_registry_for_batch(
+    batch_records: List[BusinessRecord], 
+    expansions: List[Tuple[str, str]]
+) -> Dict[int, List[CandidateRecord]]:
     """
     Fetch and enrich government registry data for a batch of business names.
 
     Args:
-        batch_df (pd.DataFrame): Batch of input records containing at least a 'Name' column.
-        expansions (List[tuple]): List of (query1, query2) pairs generated from expand_queries_for_batch.
+        batch_records (List[BusinessRecord]): Batch of input business records.
+        expansions (List[Tuple[str, str]]): List of (query1, query2) pairs generated from expand_queries_for_batch.
 
     Returns:
-        Dict[int, List[Dict[str, Any]]]: Mapping of batch indices to lists of candidate
-        records in the form {"name": str, "address": str or None}.
+        Dict[int, List[CandidateRecord]]: Mapping of batch indices to lists of candidate records.
     """
 
     logger.debug("batch coming in")
-    logger.debug(batch_df["Name"])
+    logger.debug([r.name for r in batch_records])
     timeout = ClientTimeout(total=60)
     sem = asyncio.Semaphore(CONCURRENCY)
     logger.debug("Concurrency: " )
 
-    logger.debug(f"\n🕒 [{datetime.now().strftime('%H:%M:%S')}] Starting batch of {len(batch_df)} rows")
+    logger.debug(f"\n🕒 [{datetime.now().strftime('%H:%M:%S')}] Starting batch of {len(batch_records)} rows")
 
     t_batch_start = time.perf_counter()
 
@@ -184,7 +187,7 @@ async def fetch_registry_for_batch(batch_df, expansions) -> Dict[int, List[dict]
 
         search_results = await asyncio.gather(*search_tasks)
 
-        combined_results = {i: [] for i in range(len(batch_df))}
+        combined_results = {i: [] for i in range(len(batch_records))}
         for idx, recs in search_results:
             if isinstance(recs, list):
                 combined_results[idx].extend(recs)
@@ -203,9 +206,9 @@ async def fetch_registry_for_batch(batch_df, expansions) -> Dict[int, List[dict]
 
         addr_results = await asyncio.gather(*addr_tasks)
 
-        final_results = {i: [] for i in range(len(batch_df))}
+        final_results = {i: [] for i in range(len(batch_records))}
         for idx, name, addr in addr_results:
-            final_results[idx].append({"name": name, "address": addr})
+            final_results[idx].append(CandidateRecord(name=name, address=addr))
         logger.debug("final address results")
         logger.debug(final_results)
     return final_results
