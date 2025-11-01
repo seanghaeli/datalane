@@ -1,9 +1,8 @@
 import numpy as np
 import asyncio
-import openai
 from typing import List
-from src.config import CONCURRENCY
 from src.models import BusinessRecord
+from src.clients import OpenAIClient
 from loguru import logger
 
 async def activity_confidence_check(batch_records: List[BusinessRecord]) -> List[int]:
@@ -31,7 +30,8 @@ async def activity_confidence_check(batch_records: List[BusinessRecord]) -> List
 
         async def one(desc):
             try:
-                r = await openai.ChatCompletion.acreate(
+                openai_client = OpenAIClient()
+                r = await openai_client.chat_completions_create(
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -40,7 +40,7 @@ async def activity_confidence_check(batch_records: List[BusinessRecord]) -> List
                     temperature=0.2,
                     max_tokens=10,
                 )
-                text = r["choices"][0]["message"]["content"].strip()
+                text = r.choices[0].message.content.strip()
                 val = float(text)
                 return max(0.3, min(val, 2.5))
             except Exception:

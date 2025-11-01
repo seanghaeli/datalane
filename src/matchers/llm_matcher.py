@@ -1,12 +1,8 @@
-import os
 import asyncio
 from typing import Dict, List
-from openai import AsyncOpenAI
-from src.config import CONCURRENCY
 from src.models import CandidateRecord
+from src.clients import OpenAIClient
 from loguru import logger
-
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def llm_check_one(name: str, address: str, candidates: List[CandidateRecord]) -> bool:
     """
@@ -44,7 +40,8 @@ If there is enough evidence that at least one candidate is likely referring to t
     """
     print(prompt)
     try:
-        resp = await client.chat.completions.create(
+        openai_client = OpenAIClient()
+        resp = await openai_client.chat_completions_create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=3,
@@ -73,12 +70,10 @@ async def llm_check_batch(
     Returns:
         Dict[int, bool]: Mapping of row index → boolean indicating if a match was found.
     """
-    sem = asyncio.Semaphore(CONCURRENCY)
     results: Dict[int, bool] = {}
 
     async def one_task(idx: int, name: str, addr: str, cands: List[CandidateRecord]):
-        async with sem:
-            results[idx] = await llm_check_one(name, addr, cands)
+        results[idx] = await llm_check_one(name, addr, cands)
 
     tasks = []
     for i, (n, a) in enumerate(zip(names, addresses)):
