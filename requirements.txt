@@ -5,3 +5,5 @@ rapidfuzz
 openai>=1.0.0
 loguru
 aiolimiter
+pytest
+pytest-asyncio
