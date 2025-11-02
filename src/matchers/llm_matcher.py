@@ -28,7 +28,7 @@ async def llm_check_one(name: str, address: str, candidates: List[CandidateRecor
     prompt = f"""
 You are given a target address and a list of candidate addresses.
 
-Goal: Determine if any candidate address likely corresponds to the SAME real-world location as the target address. An exact string match is NOT required. Consider common variations, abbreviations, suite/unit numbers, formatting differences, or nearby equivalences that strongly indicate the same place.
+Goal: Determine if any candidate address likely corresponds to the SAME real-world location as the target address. An exact string match is NOT required. Consider common variations, abbreviations, suite/unit numbers, formatting differences, or nearby equivalences that strongly indicate the same place. Strong evidence includes matching street numbers even when street names differ (e.g., "1552 Ave." and "1552 PR-25"), as the probability of coincidental numeric matches is acceptably low.
 
 Target address:
 {address}
