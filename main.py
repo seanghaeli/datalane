@@ -12,6 +12,7 @@ from src.search_query_set import expand_queries_for_batch
 from src.registry_fetcher import fetch_registry_for_batch
 from src.matchers.matching_orchestrator import matching_orchestrator
 from src.config import INPUT_CSV, OUTPUT_CSV, BATCH_SIZE, LOG_LEVEL
+from src.clients import ZyteClient
 
 def load_businesses_from_csv(file_path: str, nrows: int = None) -> List[BusinessRecord]:
     """Load businesses from CSV and convert to BusinessRecord objects."""
@@ -103,7 +104,7 @@ async def main():
     - Writes results incrementally to an output CSV.
     """
     # Load businesses from CSV
-    all_businesses = load_businesses_from_csv(INPUT_CSV, nrows=160)
+    all_businesses = load_businesses_from_csv(INPUT_CSV)
     
     # Initialize logs
     logger.remove()  # Remove default handler
@@ -118,21 +119,26 @@ async def main():
         writer.writerow(["Name", "results", "resultsLLM", "resultsGoogleCheck", "overallResults"])
 
     # Process each batch sequentially
-    for start_idx, batch_records in batch_iter(all_businesses, BATCH_SIZE):
-        print(f"Processing rows {start_idx}..{start_idx + len(batch_records) - 1}")
+    try:
+        for start_idx, batch_records in batch_iter(all_businesses, BATCH_SIZE):
+            print(f"Processing rows {start_idx}..{start_idx + len(batch_records) - 1}")
 
-        results = await process_batch(batch_records)
+            results = await process_batch(batch_records)
 
-        with open(output_path, "a", newline="") as f:
-            writer = csv.writer(f)
-            for result in results:
-                writer.writerow([
-                    result.name,
-                    result.results,
-                    result.results_llm,
-                    result.results_google_check,
-                    result.overall_results,
-                ])
+            with open(output_path, "a", newline="") as f:
+                writer = csv.writer(f)
+                for result in results:
+                    writer.writerow([
+                        result.name,
+                        result.results,
+                        result.results_llm,
+                        result.results_google_check,
+                        result.overall_results,
+                    ])
+    finally:
+        # Cleanup: close ZyteClient session to prevent unclosed connector warnings
+        zyte_client = ZyteClient()
+        await zyte_client.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

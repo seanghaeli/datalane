@@ -74,6 +74,9 @@ class ZyteClient:
                 ]
 
             try:
+                # Extract business name from request body for debugging
+                business_name = request_body.get("corpName", "unknown")
+                
                 async with session.post(
                     self.base_url,
                     auth=BasicAuth(self.api_key, ""),
@@ -81,6 +84,28 @@ class ZyteClient:
                     timeout=ClientTimeout(total=60)
                 ) as resp:
                     data = await resp.json()
+                    print(f"Zyte POST response for '{business_name}': {data}")
+                    
+                    # Check if Zyte returned an error response (like 520 Website Ban)
+                    if "status" in data and data.get("status") not in [200, None]:
+                        # This is a Zyte API error, not the target website response
+                        error_type = data.get("type", "unknown")
+                        error_title = data.get("title", "unknown")
+                        error_detail = data.get("detail", "no details")
+                        error_status = data.get("status")
+                        raise Exception(
+                            f"Zyte API error ({error_title}): {error_detail}. "
+                            f"Status: {error_status}, Type: {error_type}"
+                        )
+                    
+                    # Check if httpResponseBody exists (it might not for errors)
+                    if "httpResponseBody" not in data:
+                        raise Exception(
+                            f"Missing httpResponseBody in Zyte response. "
+                            f"Response keys: {list(data.keys())}, "
+                            f"Response: {data}"
+                        )
+                    
                     body = json.loads(b64decode(data["httpResponseBody"]))
                     return body
             except Exception as e:
@@ -123,6 +148,26 @@ class ZyteClient:
                     timeout=ClientTimeout(total=60)
                 ) as resp:
                     data = await resp.json()
+                    
+                    # Check if Zyte returned an error response
+                    if "status" in data and data.get("status") not in [200, None]:
+                        error_type = data.get("type", "unknown")
+                        error_title = data.get("title", "unknown")
+                        error_detail = data.get("detail", "no details")
+                        error_status = data.get("status")
+                        raise Exception(
+                            f"Zyte API error ({error_title}): {error_detail}. "
+                            f"Status: {error_status}, Type: {error_type}"
+                        )
+                    
+                    # Check if httpResponseBody exists
+                    if "httpResponseBody" not in data:
+                        raise Exception(
+                            f"Missing httpResponseBody in Zyte response. "
+                            f"Response keys: {list(data.keys())}, "
+                            f"Response: {data}"
+                        )
+                    
                     body = json.loads(b64decode(data["httpResponseBody"]))
                     return body
             except Exception as e:

@@ -39,12 +39,9 @@ def has_high_confidence_match(
             name_score = fuzz.ratio(str(name).lower(), str(cand_name).lower()) if name else 0
             addr_score = fuzz.ratio(str(addr).lower(), str(cand_addr).lower()) if addr and cand_addr else 0
             total_score = (name_weight * name_score) + (addr_weight * addr_score)
-            print(f"Name, addr and total score: {name} {addr} {cand_name} {cand_addr} {name_score} {addr_score} {total_score}")
-            print(threshold)
             # Early exit once we exceed threshold
             if total_score >= threshold:
                 found = True
-                print(f"Match found for row {i}: {name} {addr} {cand_name} {cand_addr} {name_score} {addr_score}")
                 break
 
         results[i] = found
