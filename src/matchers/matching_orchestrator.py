@@ -1,59 +1,53 @@
 # src/matching_orchestrator.py
 
-from typing import Dict, List
+from typing import List
 from src.models import BusinessRecord, CandidateRecord, MatchingResult
 from src.matchers.classical_matcher import has_high_confidence_match
-from src.matchers.llm_matcher import llm_check_batch
+from src.matchers.llm_matcher import llm_check
 from src.matchers.google_matcher import activity_confidence_check
 
 async def matching_orchestrator(
-    batch_records: List[BusinessRecord], 
-    candidates: Dict[int, List[CandidateRecord]]
-) -> List[MatchingResult]:
+    record: BusinessRecord,
+    candidates: List[CandidateRecord]
+) -> MatchingResult:
     """
     Orchestrate all matching subsystems (fuzzy, LLM, heuristic)
-    and produce a unified boolean decision per business record.
+    and produce a unified boolean decision for a single business record.
     
     Args:
-        batch_records (List[BusinessRecord]): Batch of business records.
-        candidates (Dict[int, List[CandidateRecord]]): Mapping from batch index
-            to candidate registry matches retrieved from Zyte.
+        record (BusinessRecord): Business record to match.
+        candidates (List[CandidateRecord]): Candidate registry matches retrieved from Zyte.
 
     Returns:
-        List[MatchingResult]: Matching results for each business in the batch.
+        MatchingResult: Matching result for this business.
     """
 
     # Classical fuzzy match
-    names = [r.name for r in batch_records]
-    addresses = [r.street_1 or "" for r in batch_records]
-    results = has_high_confidence_match(names, addresses, candidates)
+    classical_match = has_high_confidence_match(
+        record.name,
+        record.street_1 or "",
+        candidates
+    )
 
-    # LLM semantic match
-    resultsLLM = await llm_check_batch(names, addresses, candidates)
+    # LLM semantic match (only if we have candidates)
+    llm_match = False
+    if candidates:
+        llm_match = await llm_check(record.name, record.street_1 or "", candidates)
 
     # Combine classical + LLM
-    overallResults = {
-        i: results.get(i, False) or resultsLLM.get(i, False)
-        for i in set(results.keys()) | set(resultsLLM.keys())
-    }
+    overall_result = classical_match or llm_match
     
     # Google activity heuristic
-    resultsGoogleCheck = await activity_confidence_check(batch_records)
+    google_check = await activity_confidence_check(record)
 
     # Merge Google signal with force rules: -1 => force False
-    for i, g_val in enumerate(resultsGoogleCheck):
-        if g_val == -1:
-            overallResults[i] = False
+    # if google_check == -1:
+    #     overall_result = False
 
-    # Return list of MatchingResult objects
-    n = len(batch_records)
-    return [
-        MatchingResult(
-            name=batch_records[i].name,
-            results=bool(results.get(i, False)),
-            results_llm=bool(resultsLLM.get(i, False)),
-            results_google_check=int(resultsGoogleCheck[i]) if i < len(resultsGoogleCheck) else 0,
-            overall_results=bool(overallResults.get(i, False)),
-        )
-        for i in range(n)
-    ]
+    return MatchingResult(
+        name=record.name,
+        results=classical_match,
+        results_llm=llm_match,
+        results_google_check=google_check,
+        overall_results=overall_result,
+    )

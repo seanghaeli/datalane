@@ -1,49 +1,42 @@
 from rapidfuzz import fuzz
-from typing import List, Dict
+from typing import List
 from src.config import FUZZY_THRESHOLD
 from src.models import CandidateRecord
 
 def has_high_confidence_match(
-    names: List[str],
-    addresses: List[str],
-    candidates: Dict[int, List[CandidateRecord]],
+    name: str,
+    address: str,
+    candidates: List[CandidateRecord],
     name_weight: float = 0.25,
     addr_weight: float = 0.75,
     threshold: float = FUZZY_THRESHOLD,
-) -> Dict[int, bool]:
+) -> bool:
     """
-    Determine whether each input business record has a high-confidence fuzzy match
+    Determine whether an input business record has a high-confidence fuzzy match
     among its candidate records.
 
     Args:
-        names (List[str]): List of business names for the batch.
-        addresses (List[str]): Corresponding business addresses.
-        candidates (Dict[int, List[CandidateRecord]]): Mapping of row index → list of candidate records.
+        name (str): Business name.
+        address (str): Business address.
+        candidates (List[CandidateRecord]): List of candidate records.
         name_weight (float): Weight for the name similarity score (default=0.25).
         addr_weight (float): Weight for the address similarity score (default=0.75).
         threshold (float): Minimum weighted score required to consider a match.
 
     Returns:
-        Dict[int, bool]: Mapping of row index → True if a high-confidence match was found.
+        bool: True if a high-confidence match was found.
     """
-    results = {}
+    for cand in candidates:
+        cand_name = cand.name or ""
+        cand_addr = cand.address or ""
 
-    for i, (name, addr) in enumerate(zip(names, addresses)):
-        row_candidates = candidates.get(i, [])
-        found = False
-        for cand in row_candidates:
-            cand_name = cand.name or ""
-            cand_addr = cand.address or ""
+        # Compute similarity scores
+        name_score = fuzz.ratio(str(name).lower(), str(cand_name).lower()) if name else 0
+        addr_score = fuzz.ratio(str(address).lower(), str(cand_addr).lower()) if address and cand_addr else 0
+        total_score = (name_weight * name_score) + (addr_weight * addr_score)
+        
+        # Early exit once we exceed threshold
+        if total_score >= threshold:
+            return True
 
-            # Compute similarity scores
-            name_score = fuzz.ratio(str(name).lower(), str(cand_name).lower()) if name else 0
-            addr_score = fuzz.ratio(str(addr).lower(), str(cand_addr).lower()) if addr and cand_addr else 0
-            total_score = (name_weight * name_score) + (addr_weight * addr_score)
-            # Early exit once we exceed threshold
-            if total_score >= threshold:
-                found = True
-                break
-
-        results[i] = found
-
-    return results
+    return False

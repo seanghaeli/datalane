@@ -8,8 +8,8 @@ import sys
 from loguru import logger
 
 from src.models import BusinessRecord, MatchingResult
-from src.search_query_set import expand_queries_for_batch
-from src.registry_fetcher import fetch_registry_for_batch
+from src.search_query_set import expand_queries_for_record
+from src.registry_fetcher import fetch_registry_for_record
 from src.matchers.matching_orchestrator import matching_orchestrator
 from src.config import INPUT_CSV, OUTPUT_CSV, BATCH_SIZE, LOG_LEVEL
 from src.clients import ZyteClient
@@ -70,30 +70,26 @@ def batch_iter(records: List[BusinessRecord], batch_size: int):
     for i in range(0, n, batch_size):
         yield i, records[i:i+batch_size]
 
-async def process_batch(batch_records: List[BusinessRecord]) -> List[MatchingResult]:
+async def process_record(record: BusinessRecord) -> MatchingResult:
     """
-    Process a single batch of business records through the full matching pipeline.
+    Process a single business record through the full matching pipeline.
 
     Args:
-        batch_records (List[BusinessRecord]): Batch of input business records.
+        record (BusinessRecord): Input business record.
 
     Returns:
-        List[MatchingResult]: Matching results for each business in the batch.
+        MatchingResult: Matching result for this business.
     """
-    start = time.perf_counter()
-
-    # 1) LLM query expansion (single call for the whole batch)
-    search_queries = await expand_queries_for_batch(batch_records)
+    # 1) LLM query expansion
+    expansion = await expand_queries_for_record(record)
 
     # 2) Fetch candidates from the government registry
-    candidates = await fetch_registry_for_batch(batch_records, search_queries)
+    candidates = await fetch_registry_for_record(record, expansion)
 
     # 3) Determine whether government registry + Google Maps data support business existence
-    results = await matching_orchestrator(batch_records, candidates)
+    result = await matching_orchestrator(record, candidates)
 
-    elapsed = time.perf_counter() - start
-    logger.debug(f"Batch of {len(batch_records)} rows processed in {elapsed:.2f} seconds")
-    return results
+    return result
 
 async def main():
     """
@@ -118,12 +114,13 @@ async def main():
         writer = csv.writer(f)
         writer.writerow(["Name", "results", "resultsLLM", "resultsGoogleCheck", "overallResults"])
 
-    # Process each batch sequentially
+    # Process in batches, but use async.gather for parallelism within each batch
     try:
         for start_idx, batch_records in batch_iter(all_businesses, BATCH_SIZE):
             print(f"Processing rows {start_idx}..{start_idx + len(batch_records) - 1}")
 
-            results = await process_batch(batch_records)
+            # Process all records in the batch in parallel
+            results = await asyncio.gather(*[process_record(record) for record in batch_records])
 
             with open(output_path, "a", newline="") as f:
                 writer = csv.writer(f)

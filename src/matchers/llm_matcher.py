@@ -1,10 +1,9 @@
-import asyncio
-from typing import Dict, List
+from typing import List
 from src.models import CandidateRecord
 from src.clients import OpenAIClient
 from loguru import logger
 
-async def llm_check_one(name: str, address: str, candidates: List[CandidateRecord]) -> bool:
+async def llm_check(name: str, address: str, candidates: List[CandidateRecord]) -> bool:
     """
     LLM checking to determine if any of the given candidates correspond to the same business.
     Returns True if the model thinks at least one is a match.
@@ -56,32 +55,3 @@ If there is enough evidence that at least one candidate is likely referring to t
         return False
 
 
-async def llm_check_batch(
-    names: List[str],
-    addresses: List[str],
-    candidates: Dict[int, List[CandidateRecord]],
-) -> Dict[int, bool]:
-    """
-    Perform parallel LLM checks across a batch of businesses.
-
-    Args:
-        names (List[str]): Target business names.
-        addresses (List[str]): Corresponding business addresses.
-        candidates (Dict[int, List[CandidateRecord]]): Mapping of row index → list of candidate records.
-
-    Returns:
-        Dict[int, bool]: Mapping of row index → boolean indicating if a match was found.
-    """
-    results: Dict[int, bool] = {}
-
-    async def one_task(idx: int, name: str, addr: str, cands: List[CandidateRecord]):
-        results[idx] = await llm_check_one(name, addr, cands)
-
-    tasks = []
-    for i, (n, a) in enumerate(zip(names, addresses)):
-        cands = candidates.get(i, [])
-        if cands:
-            tasks.append(one_task(i, n, a, cands))
-
-    await asyncio.gather(*tasks)
-    return results

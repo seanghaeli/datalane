@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 from loguru import logger
 from src.config import GOV_URL
 from src.models import BusinessRecord, CandidateRecord
@@ -124,70 +124,61 @@ async def _fetch_info_one(zyte_client: ZyteClient, reg_index: str, corp_name: st
         logger.debug(f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] ERROR fetching info {reg_index}: {e}")
         return {"address": None}
 
-async def fetch_registry_for_batch(
-    batch_records: List[BusinessRecord], 
-    expansions: List[Tuple[str, str]]
-) -> Dict[int, List[CandidateRecord]]:
+async def fetch_registry_for_record(
+    record: BusinessRecord,
+    expansion: Tuple[str, str]
+) -> List[CandidateRecord]:
     """
-    Fetch and enrich government registry data for a batch of business names.
+    Fetch and enrich government registry data for a single business name.
 
     Args:
-        batch_records (List[BusinessRecord]): Batch of input business records.
-        expansions (List[Tuple[str, str]]): List of (query1, query2) pairs generated from expand_queries_for_batch.
+        record (BusinessRecord): Input business record.
+        expansion (Tuple[str, str]): (query1, query2) pair generated from expand_queries_for_record.
 
     Returns:
-        Dict[int, List[CandidateRecord]]: Mapping of batch indices to lists of candidate records.
+        List[CandidateRecord]: List of candidate records found for this business.
     """
-
-    logger.debug("batch coming in")
-    logger.debug([r.name for r in batch_records])
-
-    logger.debug(f"\n🕒 [{datetime.now().strftime('%H:%M:%S')}] Starting batch of {len(batch_records)} rows")
-
-    t_batch_start = time.perf_counter()
-
     # Get singleton Zyte client instance
     zyte_client = ZyteClient()
 
-    # Search stage
-    t1 = time.perf_counter()
-    logger.debug(f"🔍 [{datetime.now().strftime('%H:%M:%S')}] Starting name searches...")
+    # Search stage - search both the original and alternative query
+    query1, query2 = expansion
+    
+    # Execute both searches in parallel
+    search_results = await asyncio.gather(
+        _post_one(zyte_client, query1),
+        _post_one(zyte_client, query2),
+        return_exceptions=True
+    )
 
-    async def search_task(batch_idx, query):
-        recs = await _post_one(zyte_client, query)
-        return batch_idx, recs
-
-    search_tasks = [
-        asyncio.create_task(search_task(i, q))
-        for i, (q1, q2) in enumerate(expansions)
-        for q in (q1, q2)
-    ]
-
-    search_results = await asyncio.gather(*search_tasks)
-
-    combined_results = {i: [] for i in range(len(batch_records))}
-    for idx, recs in search_results:
+    # Combine results from both queries
+    combined_records = []
+    for recs in search_results:
         if isinstance(recs, list):
-            combined_results[idx].extend(recs)
+            combined_records.extend(recs)
+        elif isinstance(recs, Exception):
+            logger.debug(f"Search failed: {recs}")
 
-    # Address lookup stage
-    async def address_task(batch_idx, record):
-        reg_id = record.get("registrationIndex")
-        corp_name = record.get("corpName", "")
+    # Address lookup stage - fetch addresses for all found records
+    async def address_task(record_dict):
+        reg_id = record_dict.get("registrationIndex")
+        if not reg_id:
+            return None
+        corp_name = record_dict.get("corpName", "")
         info = await _fetch_info_one(zyte_client, reg_id, corp_name)
-        return batch_idx, corp_name, info.get("address")
+        return corp_name, info.get("address")
 
-    addr_tasks = []
-    for idx, recs in combined_results.items():
-        for record in recs:
-            if record.get("registrationIndex"):
-                addr_tasks.append(asyncio.create_task(address_task(idx, record)))
+    addr_tasks = [address_task(rec) for rec in combined_records if rec.get("registrationIndex")]
+    addr_results = await asyncio.gather(*addr_tasks, return_exceptions=True)
 
-    addr_results = await asyncio.gather(*addr_tasks)
+    # Build final candidate list
+    candidates = []
+    for result in addr_results:
+        if isinstance(result, tuple):
+            name, addr = result
+            if name:  # Only add if we got a valid name
+                candidates.append(CandidateRecord(name=name, address=addr))
+        elif isinstance(result, Exception):
+            logger.debug(f"Address lookup failed: {result}")
 
-    final_results = {i: [] for i in range(len(batch_records))}
-    for idx, name, addr in addr_results:
-        final_results[idx].append(CandidateRecord(name=name, address=addr))
-    logger.debug("final address results")
-    logger.debug(final_results)
-    return final_results
+    return candidates
